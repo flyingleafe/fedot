@@ -72,6 +72,28 @@ If no relevant PR exists:
    ```
    Keep the PR focused — only commits related to this feature on top of upstream trunk.
 
+## Step 4: Return to main
+
+After the PR is open, bring the feature commits onto local `main` and check it out:
+
+```bash
+git checkout main
+git merge --ff-only feat/<short-name>
+```
+
+If fast-forward fails (local main is behind upstream), sync first then retry:
+
+```bash
+git pull --rebase upstream main
+git merge --ff-only feat/<short-name>
+```
+
+If fast-forward still fails, do a regular merge — but always ensure `main` ends up with the new commits:
+
+```bash
+git merge feat/<short-name>
+```
+
 ## Notes
 
 - `git` and `gh` (GitHub CLI) are required
