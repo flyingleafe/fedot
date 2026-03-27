@@ -43,15 +43,14 @@ type Option func(*Provider)
 
 const defaultRequestTimeout = common.DefaultRequestTimeout
 
-// xmlToolCallPattern matches <toolcall>…</toolcall> blocks used by models such as
-// Qwen/Hermes-derived ones (e.g. mimo-v2-pro) that do not emit OpenAI function-call
-// JSON but instead produce a lightweight XML format:
+// xmlToolCallPattern matches <tool_call>…</tool_call> or <toolcall>…</toolcall> blocks
+// used by Qwen/Hermes-derived models (e.g. mimo-v2-pro) that do not emit OpenAI
+// function-call JSON. Two inner formats are supported:
 //
-//	<toolcall><shell>{"command":"ls"}</shell></toolcall>
-//
-// The inner tag name is the tool name; its text content is a JSON argument object.
+//	<tool_call>{"name":"exec","arguments":{"command":"ls"}}</tool_call>  (Hermes standard)
+//	<tool_call><shell>{"command":"ls"}</shell></tool_call>               (tag-name variant)
 var (
-	xmlToolCallPattern = regexp.MustCompile(`(?is)<toolcall>\s*(.*?)\s*</toolcall>`)
+	xmlToolCallPattern = regexp.MustCompile(`(?is)<tool_?call>\s*(.*?)\s*</tool_?call>`)
 	xmlTagOpenPattern  = regexp.MustCompile(`(?i)^<(\w+)>`)
 )
 
@@ -414,7 +413,7 @@ func applyXMLToolCallFallback(resp *LLMResponse) {
 	if resp == nil || len(resp.ToolCalls) > 0 {
 		return
 	}
-	if !strings.Contains(resp.Content, "<toolcall>") && !strings.Contains(resp.Content, "<toolcall ") {
+	if !strings.Contains(resp.Content, "<tool_call>") && !strings.Contains(resp.Content, "<toolcall>") {
 		return
 	}
 	toolCalls, stripped := parseXMLToolCalls(resp.Content)
