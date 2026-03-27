@@ -263,6 +263,11 @@ func TestParseXMLToolCalls(t *testing.T) {
 			content:   "<toolcall><shell>not json</shell></toolcall>",
 			wantCalls: 0,
 		},
+		{
+			name:      "format B: flat json with name+arguments",
+			content:   "<toolcall>\n{\"name\": \"exec\", \"arguments\": {\"command\": \"ls -la\"}}\n</toolcall>",
+			wantCalls: 1, wantTool: "exec", wantArg: "command", wantVal: "ls -la",
+		},
 	}
 
 	for _, tc := range tests {

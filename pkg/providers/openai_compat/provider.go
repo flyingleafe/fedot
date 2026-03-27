@@ -437,24 +437,38 @@ func parseXMLToolCalls(content string) ([]ToolCall, string) {
 	var toolCalls []ToolCall
 	for _, m := range matches {
 		inner := strings.TrimSpace(m[1])
-		// Extract opening tag name (Go regexp has no backreferences, so parse manually).
-		nm := xmlTagOpenPattern.FindStringSubmatch(inner)
-		if nm == nil {
-			continue
-		}
-		name := nm[1]
-		// Content is between the opening and closing tag.
-		after := inner[len(nm[0]):]
-		closeTag := "</" + name + ">"
-		closeIdx := strings.LastIndex(strings.ToLower(after), strings.ToLower(closeTag))
-		argsStr := after
-		if closeIdx >= 0 {
-			argsStr = after[:closeIdx]
-		}
-		argsStr = strings.TrimSpace(argsStr)
 
+		var name string
 		var args map[string]any
-		if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
+
+		if nm := xmlTagOpenPattern.FindStringSubmatch(inner); nm != nil {
+			// Format A: <toolcall><tool_name>{"key":"val"}</tool_name></toolcall>
+			name = nm[1]
+			after := inner[len(nm[0]):]
+			closeTag := "</" + name + ">"
+			closeIdx := strings.LastIndex(strings.ToLower(after), strings.ToLower(closeTag))
+			argsStr := after
+			if closeIdx >= 0 {
+				argsStr = after[:closeIdx]
+			}
+			if err := json.Unmarshal([]byte(strings.TrimSpace(argsStr)), &args); err != nil {
+				continue
+			}
+		} else if strings.HasPrefix(inner, "{") {
+			// Format B: <toolcall>{"name":"tool_name","arguments":{...}}</toolcall>
+			var wrapper struct {
+				Name      string         `json:"name"`
+				Arguments map[string]any `json:"arguments"`
+			}
+			if err := json.Unmarshal([]byte(inner), &wrapper); err != nil || wrapper.Name == "" {
+				continue
+			}
+			name = wrapper.Name
+			args = wrapper.Arguments
+			if args == nil {
+				args = map[string]any{}
+			}
+		} else {
 			continue
 		}
 		argsJSON, _ := json.Marshal(args)
