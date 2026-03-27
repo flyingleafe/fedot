@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -41,6 +42,18 @@ type Provider struct {
 type Option func(*Provider)
 
 const defaultRequestTimeout = common.DefaultRequestTimeout
+
+// xmlToolCallPattern matches <toolcall>…</toolcall> blocks used by models such as
+// Qwen/Hermes-derived ones (e.g. mimo-v2-pro) that do not emit OpenAI function-call
+// JSON but instead produce a lightweight XML format:
+//
+//	<toolcall><shell>{"command":"ls"}</shell></toolcall>
+//
+// The inner tag name is the tool name; its text content is a JSON argument object.
+var (
+	xmlToolCallPattern = regexp.MustCompile(`(?is)<toolcall>\s*(.*?)\s*</toolcall>`)
+	xmlTagOpenPattern  = regexp.MustCompile(`(?i)^<(\w+)>`)
+)
 
 func WithMaxTokensField(maxTokensField string) Option {
 	return func(p *Provider) {
@@ -194,7 +207,12 @@ func (p *Provider) Chat(
 		return nil, common.HandleErrorResponse(resp, p.apiBase)
 	}
 
-	return common.ReadAndParseResponse(resp, p.apiBase)
+	out, err := common.ReadAndParseResponse(resp, p.apiBase)
+	if err != nil {
+		return nil, err
+	}
+	applyXMLToolCallFallback(out)
+	return out, nil
 }
 
 // ChatStream implements streaming via OpenAI-compatible SSE (stream: true).
@@ -378,12 +396,85 @@ func parseStreamResponse(
 		finishReason = "stop"
 	}
 
-	return &LLMResponse{
+	out := &LLMResponse{
 		Content:      textContent.String(),
 		ToolCalls:    toolCalls,
 		FinishReason: finishReason,
 		Usage:        usage,
-	}, nil
+	}
+	applyXMLToolCallFallback(out)
+	return out, nil
+}
+
+// applyXMLToolCallFallback detects and parses Hermes-style XML tool calls from
+// response content when no standard OpenAI tool_calls were returned. It mutates
+// resp in place: extracted calls are moved to ToolCalls, matched text is stripped
+// from Content, and FinishReason is set to "tool_calls".
+func applyXMLToolCallFallback(resp *LLMResponse) {
+	if resp == nil || len(resp.ToolCalls) > 0 {
+		return
+	}
+	if !strings.Contains(resp.Content, "<toolcall>") && !strings.Contains(resp.Content, "<toolcall ") {
+		return
+	}
+	toolCalls, stripped := parseXMLToolCalls(resp.Content)
+	if len(toolCalls) == 0 {
+		return
+	}
+	resp.ToolCalls = toolCalls
+	resp.Content = stripped
+	resp.FinishReason = "tool_calls"
+}
+
+// parseXMLToolCalls extracts tool calls from Hermes-style XML blocks and returns
+// them along with the content with those blocks removed.
+func parseXMLToolCalls(content string) ([]ToolCall, string) {
+	matches := xmlToolCallPattern.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return nil, content
+	}
+
+	var toolCalls []ToolCall
+	for _, m := range matches {
+		inner := strings.TrimSpace(m[1])
+		// Extract opening tag name (Go regexp has no backreferences, so parse manually).
+		nm := xmlTagOpenPattern.FindStringSubmatch(inner)
+		if nm == nil {
+			continue
+		}
+		name := nm[1]
+		// Content is between the opening and closing tag.
+		after := inner[len(nm[0]):]
+		closeTag := "</" + name + ">"
+		closeIdx := strings.LastIndex(strings.ToLower(after), strings.ToLower(closeTag))
+		argsStr := after
+		if closeIdx >= 0 {
+			argsStr = after[:closeIdx]
+		}
+		argsStr = strings.TrimSpace(argsStr)
+
+		var args map[string]any
+		if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
+			continue
+		}
+		argsJSON, _ := json.Marshal(args)
+		toolCalls = append(toolCalls, ToolCall{
+			ID:        fmt.Sprintf("call_%d", len(toolCalls)+1),
+			Type:      "function",
+			Name:      name,
+			Arguments: args,
+			Function: &FunctionCall{
+				Name:      name,
+				Arguments: string(argsJSON),
+			},
+		})
+	}
+
+	if len(toolCalls) == 0 {
+		return nil, content
+	}
+	stripped := strings.TrimSpace(xmlToolCallPattern.ReplaceAllString(content, ""))
+	return toolCalls, stripped
 }
 
 func normalizeModel(model, apiBase string) string {

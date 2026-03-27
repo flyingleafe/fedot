@@ -158,6 +158,131 @@ func TestProviderChat_ParsesToolCallsWithObjectArguments(t *testing.T) {
 	}
 }
 
+func TestProviderChat_ParsesXMLToolCalls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"content": "<toolcall><shell>{\"command\":\"pwd && ls -la\"}</shell></toolcall>",
+					},
+					"finish_reason": "stop",
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	p := NewProvider("key", server.URL, "")
+	out, err := p.Chat(t.Context(), []Message{{Role: "user", Content: "ls please"}}, nil, "mimo-v2-pro", nil)
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if len(out.ToolCalls) != 1 {
+		t.Fatalf("len(ToolCalls) = %d, want 1", len(out.ToolCalls))
+	}
+	if out.ToolCalls[0].Name != "shell" {
+		t.Fatalf("ToolCalls[0].Name = %q, want shell", out.ToolCalls[0].Name)
+	}
+	if out.ToolCalls[0].Arguments["command"] != "pwd && ls -la" {
+		t.Fatalf("command = %v, want pwd && ls -la", out.ToolCalls[0].Arguments["command"])
+	}
+	if out.Content != "" {
+		t.Fatalf("Content = %q, want empty after stripping toolcall block", out.Content)
+	}
+	if out.FinishReason != "tool_calls" {
+		t.Fatalf("FinishReason = %q, want tool_calls", out.FinishReason)
+	}
+}
+
+func TestProviderChat_XMLToolCallsNotParsedWhenStandardCallsPresent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"content": "",
+						"tool_calls": []map[string]any{
+							{
+								"id":   "call_1",
+								"type": "function",
+								"function": map[string]any{
+									"name":      "shell",
+									"arguments": `{"command":"ls"}`,
+								},
+							},
+						},
+					},
+					"finish_reason": "tool_calls",
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	p := NewProvider("key", server.URL, "")
+	out, err := p.Chat(t.Context(), []Message{{Role: "user", Content: "ls"}}, nil, "gpt-4o", nil)
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if len(out.ToolCalls) != 1 || out.ToolCalls[0].Name != "shell" {
+		t.Fatalf("unexpected ToolCalls: %v", out.ToolCalls)
+	}
+}
+
+func TestParseXMLToolCalls(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		wantCalls int
+		wantTool  string
+		wantArg   string
+		wantVal   string
+	}{
+		{
+			name:      "simple shell call",
+			content:   "<toolcall><shell>{\"command\":\"ls\"}</shell></toolcall>",
+			wantCalls: 1, wantTool: "shell", wantArg: "command", wantVal: "ls",
+		},
+		{
+			name:      "with surrounding text",
+			content:   "Let me check:\n<toolcall><list_dir>{\"path\":\"/tmp\"}</list_dir></toolcall>",
+			wantCalls: 1, wantTool: "list_dir", wantArg: "path", wantVal: "/tmp",
+		},
+		{
+			name: "no toolcall tag — not parsed",
+			content:   "<shell>{\"command\":\"ls\"}</shell>",
+			wantCalls: 0,
+		},
+		{
+			name:      "invalid json inside — skipped",
+			content:   "<toolcall><shell>not json</shell></toolcall>",
+			wantCalls: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			calls, _ := parseXMLToolCalls(tc.content)
+			if len(calls) != tc.wantCalls {
+				t.Fatalf("len(calls) = %d, want %d", len(calls), tc.wantCalls)
+			}
+			if tc.wantCalls > 0 {
+				if calls[0].Name != tc.wantTool {
+					t.Fatalf("Name = %q, want %q", calls[0].Name, tc.wantTool)
+				}
+				if calls[0].Arguments[tc.wantArg] != tc.wantVal {
+					t.Fatalf("arg %q = %v, want %q", tc.wantArg, calls[0].Arguments[tc.wantArg], tc.wantVal)
+				}
+			}
+		})
+	}
+}
+
 func TestProviderChat_ParsesReasoningContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]any{
