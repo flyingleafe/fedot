@@ -123,7 +123,7 @@ func runSelfImprove(channel, chatID, prompt, workDir, serviceName, picoHome stri
 		}
 
 		// ── Step 1: run claude with streaming output ────────────────────────
-		claudeErr := runClaudeStreaming(workDir, prompt, sendMsg)
+		claudeErr := RunClaudeStreaming(workDir, prompt, sendMsg)
 
 		if claudeErr != nil {
 			revertAndNotify(workDir, initialHead, attempt, fmt.Sprintf("claude exited: %v", claudeErr), sendMsg)
@@ -199,14 +199,14 @@ func runSelfImprove(channel, chatID, prompt, workDir, serviceName, picoHome stri
 	}
 }
 
-// runClaudeStreaming runs `claude -p <prompt> --permission-mode auto` and streams
+// RunClaudeStreaming runs `claude -p <prompt> --permission-mode acceptEdits` and streams
 // its combined stdout+stderr to the user in periodic chunks. Returns the
 // process error (nil on exit 0).
-func runClaudeStreaming(workDir, prompt string, sendMsg func(string)) error {
+func RunClaudeStreaming(workDir, prompt string, sendMsg func(string)) error {
 	ctx, cancel := context.WithTimeout(context.Background(), selfImproveClaudeTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "claude", "-p", prompt, "--permission-mode", "auto")
+	cmd := exec.CommandContext(ctx, "claude", "-p", prompt, "--permission-mode", "acceptEdits")
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
