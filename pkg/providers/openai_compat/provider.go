@@ -43,14 +43,15 @@ type Option func(*Provider)
 
 const defaultRequestTimeout = common.DefaultRequestTimeout
 
-// xmlToolCallPattern matches <tool_call>…</tool_call> or <toolcall>…</toolcall> blocks
-// used by Qwen/Hermes-derived models (e.g. mimo-v2-pro) that do not emit OpenAI
-// function-call JSON. Two inner formats are supported:
+// xmlToolCallPattern matches <toolcall>…</toolcall> blocks used by models such as
+// Qwen/Hermes-derived ones (e.g. mimo-v2-pro) that do not emit OpenAI function-call
+// JSON but instead produce a lightweight XML format:
 //
-//	<tool_call>{"name":"exec","arguments":{"command":"ls"}}</tool_call>  (Hermes standard)
-//	<tool_call><shell>{"command":"ls"}</shell></tool_call>               (tag-name variant)
+//	<toolcall><shell>{"command":"ls"}</shell></toolcall>
+//
+// The inner tag name is the tool name; its text content is a JSON argument object.
 var (
-	xmlToolCallPattern = regexp.MustCompile(`(?is)<tool_?call>\s*(.*?)\s*</tool_?call>`)
+	xmlToolCallPattern = regexp.MustCompile(`(?is)<toolcall>\s*(.*?)\s*</toolcall>`)
 	xmlTagOpenPattern  = regexp.MustCompile(`(?i)^<(\w+)>`)
 )
 
@@ -413,7 +414,7 @@ func applyXMLToolCallFallback(resp *LLMResponse) {
 	if resp == nil || len(resp.ToolCalls) > 0 {
 		return
 	}
-	if !strings.Contains(resp.Content, "<tool_call>") && !strings.Contains(resp.Content, "<toolcall>") {
+	if !strings.Contains(resp.Content, "<toolcall>") && !strings.Contains(resp.Content, "<toolcall ") {
 		return
 	}
 	toolCalls, stripped := parseXMLToolCalls(resp.Content)
@@ -436,38 +437,24 @@ func parseXMLToolCalls(content string) ([]ToolCall, string) {
 	var toolCalls []ToolCall
 	for _, m := range matches {
 		inner := strings.TrimSpace(m[1])
+		// Extract opening tag name (Go regexp has no backreferences, so parse manually).
+		nm := xmlTagOpenPattern.FindStringSubmatch(inner)
+		if nm == nil {
+			continue
+		}
+		name := nm[1]
+		// Content is between the opening and closing tag.
+		after := inner[len(nm[0]):]
+		closeTag := "</" + name + ">"
+		closeIdx := strings.LastIndex(strings.ToLower(after), strings.ToLower(closeTag))
+		argsStr := after
+		if closeIdx >= 0 {
+			argsStr = after[:closeIdx]
+		}
+		argsStr = strings.TrimSpace(argsStr)
 
-		var name string
 		var args map[string]any
-
-		if nm := xmlTagOpenPattern.FindStringSubmatch(inner); nm != nil {
-			// Format A: <toolcall><tool_name>{"key":"val"}</tool_name></toolcall>
-			name = nm[1]
-			after := inner[len(nm[0]):]
-			closeTag := "</" + name + ">"
-			closeIdx := strings.LastIndex(strings.ToLower(after), strings.ToLower(closeTag))
-			argsStr := after
-			if closeIdx >= 0 {
-				argsStr = after[:closeIdx]
-			}
-			if err := json.Unmarshal([]byte(strings.TrimSpace(argsStr)), &args); err != nil {
-				continue
-			}
-		} else if strings.HasPrefix(inner, "{") {
-			// Format B: <toolcall>{"name":"tool_name","arguments":{...}}</toolcall>
-			var wrapper struct {
-				Name      string         `json:"name"`
-				Arguments map[string]any `json:"arguments"`
-			}
-			if err := json.Unmarshal([]byte(inner), &wrapper); err != nil || wrapper.Name == "" {
-				continue
-			}
-			name = wrapper.Name
-			args = wrapper.Arguments
-			if args == nil {
-				args = map[string]any{}
-			}
-		} else {
+		if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
 			continue
 		}
 		argsJSON, _ := json.Marshal(args)

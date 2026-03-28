@@ -263,21 +263,6 @@ func TestParseXMLToolCalls(t *testing.T) {
 			content:   "<toolcall><shell>not json</shell></toolcall>",
 			wantCalls: 0,
 		},
-		{
-			name:      "format B: flat json with name+arguments",
-			content:   "<toolcall>\n{\"name\": \"exec\", \"arguments\": {\"command\": \"ls -la\"}}\n</toolcall>",
-			wantCalls: 1, wantTool: "exec", wantArg: "command", wantVal: "ls -la",
-		},
-		{
-			name:      "Hermes standard: <tool_call> with underscore",
-			content:   "<tool_call>\n{\"name\": \"exec\", \"arguments\": {\"command\": \"ls -la\"}}\n</tool_call>",
-			wantCalls: 1, wantTool: "exec", wantArg: "command", wantVal: "ls -la",
-		},
-		{
-			name:      "Hermes standard: multiple <tool_call> blocks",
-			content:   "<tool_call>\n{\"name\": \"exec\", \"arguments\": {\"command\": \"ls -la\"}}\n</tool_call>\n\n<tool_call>\n{\"name\": \"exec\", \"arguments\": {\"command\": \"pwd\"}}\n</tool_call>",
-			wantCalls: 2, wantTool: "exec", wantArg: "command", wantVal: "ls -la",
-		},
 	}
 
 	for _, tc := range tests {
