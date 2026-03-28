@@ -17,4 +17,6 @@ type Runtime struct {
 	SwitchChannel      func(value string) error
 	ClearHistory       func() error
 	ReloadConfig       func() error
+	// SendMessage sends an outbound message to a channel/chat from background goroutines.
+	SendMessage func(channel, chatID, content string) error
 }

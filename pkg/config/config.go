@@ -36,7 +36,8 @@ type Config struct {
 	Tools     ToolsConfig     `json:"tools"              yaml:",inline"`
 	Heartbeat HeartbeatConfig `json:"heartbeat"          yaml:"-"`
 	Devices   DevicesConfig   `json:"devices"            yaml:"-"`
-	Voice     VoiceConfig     `json:"voice"              yaml:"-"`
+	Voice       VoiceConfig       `json:"voice"                yaml:"-"`
+	SelfImprove SelfImproveConfig `json:"self_improve,omitempty" yaml:"-"`
 	// BuildInfo contains build-time version information
 	BuildInfo BuildInfo `json:"build_info,omitempty" yaml:"-"`
 
@@ -293,6 +294,13 @@ type ChannelsConfig struct {
 	Pico       PicoConfig       `json:"pico"        yaml:"pico,omitempty"`
 	PicoClient PicoClientConfig `json:"pico_client" yaml:"pico_client,omitempty"`
 	IRC        IRCConfig        `json:"irc"         yaml:"irc,omitempty"`
+}
+
+// SelfImproveConfig controls the /selfimprove command behavior.
+type SelfImproveConfig struct {
+	WorkDir     string              `json:"work_dir,omitempty"`
+	ServiceName string              `json:"service_name,omitempty"`
+	AllowFrom   FlexibleStringSlice `json:"allow_from,omitempty"`
 }
 
 // GroupTriggerConfig controls when the bot responds in group chats.

@@ -30,6 +30,7 @@ import (
 	_ "github.com/sipeed/picoclaw/pkg/channels/weixin"
 	_ "github.com/sipeed/picoclaw/pkg/channels/whatsapp"
 	_ "github.com/sipeed/picoclaw/pkg/channels/whatsapp_native"
+	"github.com/sipeed/picoclaw/pkg/commands"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/devices"
@@ -357,6 +358,18 @@ func setupAndStartServices(
 	if err = runningServices.ChannelManager.StartAll(context.Background()); err != nil {
 		return nil, fmt.Errorf("error starting channels: %w", err)
 	}
+
+	// Notify the requesting user if a self-improve restart was pending.
+	picoHome := filepath.Dir(cfg.WorkspacePath())
+	go commands.SendStartupRestartNotification(picoHome, func(channel, chatID, content string) error {
+		pubCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return msgBus.PublishOutbound(pubCtx, bus.OutboundMessage{
+			Channel: channel,
+			ChatID:  chatID,
+			Content: content,
+		})
+	})
 
 	fmt.Printf(
 		"✓ Health endpoints available at http://%s:%d/health, /ready and /reload (POST)\n",

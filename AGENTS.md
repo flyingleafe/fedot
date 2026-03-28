@@ -71,3 +71,24 @@ Sessions are keyed `channel:chatID`. History is stored as JSONL per session in `
 ### Tools & Skills
 
 Tools are registered in `pkg/tools/` and available to the agent loop. Built-ins include shell execution, file read/write, web search, cron scheduling, and MCP protocol integration (`pkg/mcp/`). Skills are Markdown files loaded from configured directories and injected as tool context.
+
+## Self-Improvement Mode
+
+When invoked via the `/selfimprove` Telegram command you are operating in **self-improvement mode**. The picoclaw process launched you via `claude -p <prompt> --permission-mode auto`. Your stdout/stderr are captured and forwarded to the requesting user.
+
+Follow this workflow exactly:
+
+1. Understand the request and make the necessary code changes.
+2. Run `make build` to verify the code compiles. Fix any errors and rebuild until it passes.
+3. Run `make install` to install the updated binary to `~/.local/bin/picoclaw`.
+4. Run `systemctl --user restart picoclaw` to restart the service with the new binary.
+5. Run `systemctl --user is-active picoclaw` to confirm the service came back up.
+6. Print a concise summary of what you changed and the outcome.
+
+**Important rules:**
+- **Always commit your changes** before running `make install`. The worktree may contain other uncommitted work; if self-improvement fails, the caller reverts to the pre-attempt HEAD, which would destroy any uncommitted changes.
+- Do NOT restart the service unless both `make build` and `make install` succeed.
+- Print progress clearly — the user sees your stdout in real time.
+- If any step fails, print the error and exit with a non-zero code so the caller can revert and retry.
+- Keep changes minimal and focused on the stated request.
+- Do NOT modify CLAUDE.md, config files, or credentials during self-improvement.
