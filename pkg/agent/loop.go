@@ -3480,6 +3480,7 @@ func (al *AgentLoop) buildCommandsRuntime(agent *AgentInstance, opts *processOpt
 			Content: content,
 		})
 	}
+	rt.ProcessDirect = al.ProcessDirect
 	return rt
 }
 

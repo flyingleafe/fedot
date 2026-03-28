@@ -17,5 +17,6 @@ func BuiltinDefinitions() []Definition {
 		subagentsCommand(),
 		reloadCommand(),
 		selfimproveCommand(),
+		selfimproveDWYMCommand(),
 	}
 }

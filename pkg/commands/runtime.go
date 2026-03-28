@@ -1,6 +1,10 @@
 package commands
 
-import "github.com/sipeed/picoclaw/pkg/config"
+import (
+	"context"
+
+	"github.com/sipeed/picoclaw/pkg/config"
+)
 
 // Runtime provides runtime dependencies to command handlers. It is constructed
 // per-request by the agent loop so that per-request state (like session scope)
@@ -19,4 +23,7 @@ type Runtime struct {
 	ReloadConfig       func() error
 	// SendMessage sends an outbound message to a channel/chat from background goroutines.
 	SendMessage func(channel, chatID, content string) error
+	// ProcessDirect sends a prompt through the agent loop and returns the response.
+	// Used by commands that need to leverage the default agent (e.g. for web search elaboration).
+	ProcessDirect func(ctx context.Context, content, sessionKey string) (string, error)
 }
