@@ -67,3 +67,5 @@ web/backend/dist/*
 .claude/settings.local.json
 
 docker/data
+# CocoIndex Code (ccc)
+/.cocoindex_code/
