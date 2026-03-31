@@ -13,6 +13,9 @@ type Request struct {
 	SenderID string
 	Text     string
 	Reply    func(text string) error
+	// DeleteMessage deletes the originating message from the chat (optional).
+	// Used by sensitive commands to remove secret input from chat history.
+	DeleteMessage func() error
 }
 
 const unavailableMsg = "Command unavailable in current context."

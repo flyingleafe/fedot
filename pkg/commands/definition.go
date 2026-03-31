@@ -27,6 +27,9 @@ type Definition struct {
 	Aliases     []string
 	SubCommands []SubCommand // optional; when set, Executor routes to sub-command handlers
 	Handler     Handler      // for simple commands without sub-commands
+	// Sensitive marks commands that handle secret input (e.g. API keys).
+	// Sensitive commands are intercepted before routing to suppress key material from logs.
+	Sensitive bool
 }
 
 // EffectiveUsage returns the usage string. When SubCommands are present,

@@ -6,10 +6,18 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 
 	"github.com/sipeed/picoclaw/pkg"
 )
+
+func DefaultConfigPath() string {
+	if p := os.Getenv(EnvConfig); p != "" {
+		return p
+	}
+	return filepath.Join(GetHome(), "config.json")
+}
 
 // DefaultConfig returns the default configuration for PicoClaw.
 func DefaultConfig() *Config {

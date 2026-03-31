@@ -11,6 +11,7 @@ import (
 // can coexist with long-lived callbacks (like GetModelInfo).
 type Runtime struct {
 	Config             *config.Config
+	ConfigPath         string
 	GetModelInfo       func() (name, provider string)
 	ListAgentIDs       func() []string
 	ListDefinitions    func() []Definition

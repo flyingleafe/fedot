@@ -18,5 +18,6 @@ func BuiltinDefinitions() []Definition {
 		reloadCommand(),
 		selfimproveCommand(),
 		selfimproveDWYMCommand(),
+		secretCommand(),
 	}
 }
